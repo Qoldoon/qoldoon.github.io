@@ -197,10 +197,10 @@
     border: 0.5px solid var(--border);
   }
 
-  .video-wrap video {
+  .video-wrap iframe {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    border: none;
     outline: none;
   }
 
@@ -265,7 +265,7 @@
       <button class="close-btn" onclick="closeModal()">&#x2715;</button>
     </div>
     <div class="video-wrap">
-      <video id="player" controls playsinline preload="metadata"></video>
+      <iframe id="player" allowfullscreen allow="autoplay"></iframe>
     </div>
     <div class="nav-row">
       <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
@@ -278,64 +278,63 @@
 <footer>Bachelor's Presentation &mdash; Demo Reel</footer>
 
 <script>
-// ─────────────────────────────────────────────
-// EDIT YOUR CLIPS HERE
-// Each entry: { label, tag, url }
-// label = name shown on card and in modal
-// tag   = short descriptor (e.g. "Gameplay", "UI", "Boss Fight")
-// url   = direct link to your video file
-// ─────────────────────────────────────────────
-const clips = [
-  {
-    label: "Core Gameplay Loop",
-    tag: "Gameplay",
-    url: "https://www.w3schools.com/html/mov_bbb.mp4"
-  },
-  {
-    label: "Main Menu & Navigation",
-    tag: "UI",
-    url: "https://www.w3schools.com/html/mov_bbb.mp4"
-  },
-  {
-    label: "Level Progression",
-    tag: "Progression",
-    url: "https://www.w3schools.com/html/mov_bbb.mp4"
-  },
-  {
-    label: "Special Mechanics",
-    tag: "Feature",
-    url: "https://www.w3schools.com/html/mov_bbb.mp4"
-  }
-];
-// ─────────────────────────────────────────────
+const FOLDER_ID = '1wxBoaN7-7yGqI9sVdHdvMEtil4bjCHSZ';
+const API_KEY   = 'AIzaSyCfyiYrJ8yL5hpIsW0_YsF1RgEQ9oh57pk';
 
+let clips   = [];
 let current = 0;
 const player = document.getElementById('player');
-const modal = document.getElementById('modal');
+const modal  = document.getElementById('modal');
+const grid   = document.getElementById('grid');
 
-document.getElementById('clip-count').textContent = clips.length + ' clips';
+async function loadFromDrive() {
+  const q = encodeURIComponent(`'${FOLDER_ID}' in parents and trashed=false and mimeType contains 'video/'`);
+  const fields = encodeURIComponent('files(id,name)');
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&orderBy=name&key=${API_KEY}`;
 
-const grid = document.getElementById('grid');
-clips.forEach((clip, i) => {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `
-    <div class="thumb">
-      <span class="thumb-num">0${i+1}</span>
-      <div class="play-btn">
-        <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
-          <path d="M1 1L13 8L1 15V1Z" fill="rgba(255,255,255,0.9)"/>
-        </svg>
+  let files;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Drive API ${res.status}`);
+    ({ files } = await res.json());
+  } catch (e) {
+    grid.innerHTML = `<p style="color:var(--muted);padding:32px">Failed to load clips: ${e.message}</p>`;
+    return;
+  }
+
+  if (!files || files.length === 0) {
+    grid.innerHTML = `<p style="color:var(--muted);padding:32px">No videos found in folder.</p>`;
+    return;
+  }
+
+  clips = files.map(f => ({
+    label: f.name.replace(/\.[^.]+$/, ''),
+    id: f.id
+  }));
+
+  document.getElementById('clip-count').textContent = clips.length + ' clip' + (clips.length !== 1 ? 's' : '');
+
+  clips.forEach((clip, i) => {
+    const num = String(i + 1).padStart(2, '0');
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="thumb">
+        <span class="thumb-num">${num}</span>
+        <div class="play-btn">
+          <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
+            <path d="M1 1L13 8L1 15V1Z" fill="rgba(255,255,255,0.9)"/>
+          </svg>
+        </div>
       </div>
-    </div>
-    <div class="card-info">
-      <span class="card-label">${clip.label}</span>
-      <span class="card-tag">${clip.tag}</span>
-    </div>
-  `;
-  card.addEventListener('click', () => openModal(i));
-  grid.appendChild(card);
-});
+      <div class="card-info">
+        <span class="card-label">${clip.label}</span>
+      </div>
+    `;
+    card.addEventListener('click', () => openModal(i));
+    grid.appendChild(card);
+  });
+}
 
 function openModal(index) {
   current = index;
@@ -344,7 +343,6 @@ function openModal(index) {
 }
 
 function closeModal() {
-  player.pause();
   player.src = '';
   modal.classList.remove('open');
 }
@@ -355,9 +353,7 @@ function loadClip(index) {
   document.getElementById('nav-indicator').textContent = `${index + 1} / ${clips.length}`;
   document.getElementById('prev-btn').disabled = index === 0;
   document.getElementById('next-btn').disabled = index === clips.length - 1;
-  player.src = clip.url;
-  player.load();
-  player.play();
+  player.src = `https://drive.google.com/file/d/${clip.id}/preview`;
 }
 
 function navigate(dir) {
@@ -368,10 +364,11 @@ function navigate(dir) {
   }
 }
 
-// Prevent accidental swipe-back gesture on iOS
 document.addEventListener('touchmove', e => {
   if (modal.classList.contains('open')) e.stopPropagation();
 }, { passive: false });
+
+loadFromDrive();
 </script>
 
 </body>
